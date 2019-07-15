@@ -1,0 +1,17 @@
+name: tutorial
+channels:
+  - defaults
+dependencies:
+  - python=3.6.8
+  - tensorflow
+  - nltk
+  - ipyparallel
+  - matplotlib
+  - ipython
+  - jupyter
+  - jupyter_client
+  - jupyter_core
+  - jupyterlab
+  - numpy
+  - pandas
+prefix: /anaconda3/envs/tutorial
