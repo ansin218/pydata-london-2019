@@ -1,7 +1,5 @@
 # How to Validate Your Client Churn Model
-By Elena Sharova
-
-Audience level: Intermediate
+Speaker: [Elena Sharova](https://github.com/elena-sharova)
 
 ## Description
 
