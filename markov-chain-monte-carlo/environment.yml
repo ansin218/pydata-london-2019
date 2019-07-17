@@ -1,0 +1,34 @@
+name: mcmc_tutorial
+
+channels:
+ - conda-forge
+
+dependencies:
+- python=3.7
+- cython
+- graphviz
+- ipython
+- ipywidgets
+- jupyter_client
+- jupyter_core
+- conda-forge::jupyterlab>=1.0.2
+- lxml
+- matplotlib
+- mkl-service
+- nodejs
+- notebook
+- numpy
+- pandas
+- patsy
+- pymc3
+- pydot
+- python-graphviz
+- scipy=1.1.0
+- seaborn
+- setuptools
+- xlrd
+- pip:
+  - arviz
+  - autograd
+  - git+https://github.com/colcarroll/minimc.git
+  - theano
