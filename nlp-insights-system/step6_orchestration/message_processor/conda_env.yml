@@ -1,0 +1,22 @@
+name: app
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.7
+  - pandas
+  - numpy
+  - ujson
+  - uvloop
+  - bottleneck
+  - pip
+  - pip:
+    - fire
+    - torch>=1.0.0
+    - torchvision
+    - fastai==1.0.54
+    - spacy
+    - aiogram
+    - tqdm 
+    - redis
+    - praw>=6.1.1
+    - python-dotenv
