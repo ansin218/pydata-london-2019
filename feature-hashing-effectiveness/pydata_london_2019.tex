@@ -1,0 +1,715 @@
+\documentclass[12pt,aspectratio=169]{beamer}
+
+\usetheme[
+    sectionpage=progressbar,
+    subsectionpage=progressbar,
+    progressbar=frametitle
+]{metropolis}
+
+\definecolor{blue-grey-900}{HTML}{263238}
+\definecolor{deep-orange-500}{HTML}{FF5722}
+\setbeamercolor{normal text}{fg=blue-grey-900, bg=white}
+\setbeamercolor{alerted text}{fg=deep-orange-500}
+
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{hyphenat}
+
+\usepackage{polyglossia}
+\setdefaultlanguage[variant=british]{english}
+\usepackage[english=british]{csquotes}
+
+\usepackage{fontspec}
+\setmainfont{Lucida Sans OT}
+\setsansfont[Scale=MatchLowercase]{Lucida Sans OT}
+\setmonofont[Scale=MatchLowercase]{Lucida Console DK}
+\defaultfontfeatures{Ligatures=TeX}
+
+\usepackage[cache=false]{minted}
+\usemintedstyle{tango}
+\newminted[py3]{python}{%
+    python3,
+    autogobble,
+    bgcolor=mDarkTeal!10,
+    linenos
+}
+
+\usepackage{kbordermatrix}
+\renewcommand{\kbldelim}{[}
+\renewcommand{\kbrdelim}{]}
+
+\renewcommand{\vec}[1]{\ensuremath{\mathbf{#1}}}
+\newcommand{\mat}[1]{\ensuremath{\vec{#1}}}
+
+\newcommand{\E}[1]{\ensuremath{\mathbb{E}\!\left[ #1 \right]}}
+
+\title[The unreasonable effectiveness of feature hashing]%
+      {The unreasonable effectiveness of\\feature hashing}
+\author[Gianluca Campanella]%
+       {Gianluca Campanella
+        \fontspec{Gentium}\textcolor{gray}{[dʒanˈluːka kampaˈnɛlla]}}
+\date{14\textsuperscript{th} July 2019}
+
+\begin{document}
+
+\maketitle
+
+\begin{frame}{What I do nowadays}
+    \LARGE%
+    \only<1>{%
+        \begin{center}
+            I'm a Data Scientist at \\[\bigskipamount]
+            \includegraphics[height=2.5em]{figures/microsoft} \\[\medskipamount]
+            in \textbf{AzureCAT}
+        \end{center}}
+    \only<2>{%
+        \begin{center}
+            I also run my own company \\[\bigskipamount]
+            \raisebox{-0.5\height}{\includegraphics[height=2.5em]{figures/estimand}}
+            \raisebox{-0.5\height}{\huge Estimand} \\[\medskipamount]
+            that provides \\
+            \textbf{Data Science consulting and training}
+        \end{center}}
+\end{frame}
+
+\begin{frame}{Contents}
+    \tableofcontents[hideallsubsections]
+\end{frame}
+
+\begin{frame}{Acknowledgements}
+    \begin{itemize}
+        \setlength\itemsep{\bigskipamount}
+        \item Sharat Chikkerur
+        \item Markus Cozowicz
+    \end{itemize}
+\end{frame}
+
+\section{Background}
+
+\begin{frame}{Supervised ML}
+    \begin{itemize}
+        \item Observe $\mat{X}_{n \times p}$ and $\vec{y}_{n}$
+              (typically $n \gg p$)
+        \item Find the `best' estimator of some statistic of $\vec{y}$ given
+              $\mat{X}$ \\
+              (for example $\E{\vec{y} | \mat{X}}$)
+    \end{itemize}
+    \vfill\pause
+    \begin{block}{Generalised linear models (GLMs)}
+        \begin{itemize}
+            \item $\E{\vec{y} | \mat{X}} = g^{-1} \left( \mat{X} \vec{\beta} \right)$
+                  with $g$ given
+            \item Find the `best' estimates for $\vec{\beta}$
+        \end{itemize}
+    \end{block}
+\end{frame}
+
+\begin{frame}{Features are often categorical}
+    \begin{itemize}
+        \setlength\itemsep{\bigskipamount}
+        \item Discretised continuous features
+        \item One\hyp{}hot encoding
+        \item Bag\hyp{}of\hyp{}words representation
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{One-hot encoding}
+    \centering
+    \begin{tabular}{l}
+        \toprule
+        \texttt{country} \\
+        \midrule
+        England \\
+        Wales \\
+        Scotland \\
+        Scotland \\
+        Northern Ireland \\
+        \bottomrule
+    \end{tabular}
+    $\to$
+    $
+        \kbordermatrix{
+            & \texttt{ENG} & \texttt{NIR} & \texttt{SCT} & \texttt{WLS} \\
+            & 1 & 0 & 0 & 0 \\
+            & 0 & 0 & 0 & 1 \\
+            & 0 & 0 & 1 & 0 \\
+            & 0 & 0 & 1 & 0 \\
+            & 0 & 1 & 0 & 0
+        }
+    $
+\end{frame}
+
+\begin{frame}{Bag-of-words representation}
+    \centering
+    \begin{tabular}{l}
+        \toprule
+        \texttt{document} \\
+        \midrule
+        Ashley loves cats. She also likes dogs. \\
+        Barbara hates cats but she loves dogs. \\
+        Carol loves cats and dogs. \\
+        \bottomrule
+    \end{tabular}
+    \vfill
+    $\downarrow$
+    \vfill
+    $
+        \kbordermatrix{
+            & \texttt{cat} & \texttt{dog} & \texttt{hate} & \texttt{like} & \texttt{love} \\
+            & 1 & 1 & 0 & 1 & 1 \\
+            & 1 & 1 & 1 & 0 & 1 \\
+            & 1 & 1 & 0 & 0 & 1
+        }
+    $
+\end{frame}
+
+\begin{frame}{High-dimensional feature space}
+    \only<1>{%
+        \begin{block}{What's going on?}
+            \begin{itemize}
+                \item $n$ is fixed
+                \item $p$ depends on the cardinality of features
+            \end{itemize}
+        \end{block}}
+    \only<2>{%
+        \begin{block}{Why is this a problem?}
+            \begin{itemize}
+                \item Online learning
+                \item $p \to n$ breaks GLMs (though regularisation helps)
+            \end{itemize}
+        \end{block}}
+    \only<3>{%
+        \centering
+        \raisebox{-0.5\height}{\includegraphics[height=0.5\textheight]{figures/cat}}
+        \quad
+        $\to$
+        \quad
+        \raisebox{-0.5\height}{\includegraphics[height=0.2\textheight]{figures/ai}}
+        \quad
+        $\to$
+        \quad
+        $
+            \kbordermatrix{
+                & \texttt{cat} & \texttt{dog} \\
+                & 0.99         & 0.01         \\
+            }
+        $}
+    \only<4>{%
+        \begin{block}{Observations in $\mat{X}$ are high\hyp{}dimensional but
+                      \alert{sparse}}
+            \begin{itemize}
+                \item Ad tech
+                \item E\hyp{}commerce
+                \item Social networks
+            \end{itemize}
+        \end{block}}
+    \only<5>{%
+        \begin{block}{\alert{Can we find a `smaller' $\mat{X}$?}}
+            \begin{itemize}
+                \item Time\hyp{} and space\hyp{}efficient to compute
+                \item Fixed $p$
+                \item Sparse
+            \end{itemize}
+        \end{block}}
+\end{frame}
+
+\begin{frame}{Recap}
+    \begin{itemize}
+        \setlength\itemsep{\bigskipamount}
+        \item Categorical and textual features are common
+              \begin{itemize}
+                  \item[$\to$] $p \propto$ feature cardinality
+                               (often very large)
+                  \item[$\to$] Sparse $\mat{X}$
+              \end{itemize}
+        \item Want an efficiently computed, fixed\hyp{}$p$, sparse
+              representation
+    \end{itemize}
+\end{frame}
+
+\section{Feature hashing}
+
+\begin{frame}[fragile]{Feature hashing}
+    \only<1>{%
+        \begin{center}
+            \texttt{country} = `England'
+            \vfill
+            $\downarrow$
+            \vfill
+            Hash value \\
+            {\footnotesize%
+             $h \left( \texttt{country=England} \right) = 1462978411$}
+            \vfill
+            $\downarrow$
+            \vfill
+            Feature index \\
+            {\footnotesize%
+             $i = h \left( \texttt{country=England} \right) \operatorname{mod} 100 = 11$}
+        \end{center}}
+    \only<2>{%
+        \centering
+        \begin{tabular}{l}
+            \toprule
+            \texttt{country} \\
+            \midrule
+            England \\
+            Wales \\
+            Scotland \\
+            Scotland \\
+            Northern Ireland \\
+            \bottomrule
+        \end{tabular}
+        $\to$
+        $
+            \kbordermatrix{
+                & i \\
+                & 11 \\
+                & 62 \\
+                & 54 \\
+                & 54 \\
+                & 8 \\
+            }
+        $
+        $\to$
+        $
+            \kbordermatrix{
+                & \ldots & \vec{x}_{8} & \ldots & \vec{x}_{11} & \ldots & \vec{x}_{54} & \ldots & \vec{x}_{62} & \ldots \\
+                & & & & 1 & & & & & \\
+                & & & & & & & & 1 & \\
+                & & & & & & 1 & & & \\
+                & & & & & & 1 & & & \\
+                & & 1 & & & & & & &
+            }
+        $}
+    \only<3>{%
+        \begin{itemize}
+            \item Time\hyp{} (\texttt{\%timeit}: 468 ns ± 7.2 ns) and
+                  space\hyp{}efficient
+            \item Fixed $p$
+            \item Sparse
+        \end{itemize}}
+\end{frame}
+
+\begin{frame}{Hash function}
+    \begin{center}
+        $h$ maps \alert{any} integer input onto integers in some range
+        (e.g.\ \texttt{int32})
+    \end{center}
+    \vfill
+    \begin{block}{Important properties}
+        \begin{itemize}
+            \item Uniform output
+            \item Avalanche effect
+                  \begin{itemize}
+                      \item $h \left( \texttt{a} \right) \to 3001393763$
+                      \item $h \left( \texttt{c} \right) \to 1701913768$
+                  \end{itemize}
+        \end{itemize}
+    \end{block}
+\end{frame}
+
+\begin{frame}[fragile]{Feature hashing in Python}
+    \begin{py3}
+        import mmh3
+
+        s = "country=England"
+
+        h = mmh3.hash(s, seed=42, signed=False)
+        print(h)  # => 1462978411
+
+        i = h % 100
+        print(i)  # => 11
+    \end{py3}
+\end{frame}
+
+\begin{frame}[fragile]{Hashing of Unicode strings}
+    \begin{itemize}
+        \item Strings are just (very large) integers
+        \item Be careful when handling Unicode
+    \end{itemize}
+    \vfill
+    \begin{py3}
+        s1 = "sch\u00f6n"
+        s2 = "scho\u0308n"
+
+        print(s1)        # => schön
+        print(s2)        # => schön
+        print(s1 == s2)  # => False
+    \end{py3}
+\end{frame}
+
+\begin{frame}[fragile]{Unicode normalisation}
+    \begin{py3}
+        import unicodedata
+
+        s1 = unicodedata.normalize("NFKD", "sch\u00f6n")
+        s2 = unicodedata.normalize("NFKD", "scho\u0308n")
+
+        print(s1)        # => schön
+        print(s2)        # => schön
+        print(s1 == s2)  # => True
+    \end{py3}
+\end{frame}
+
+\begin{frame}[fragile]{Projection}
+    \begin{itemize}
+        \item The modulo operator is expensive
+        \item If the hash size is a power of two, we can do better
+    \end{itemize}
+    \vfill
+    \begin{py3}
+        %timeit h % 128
+        # => 81.3 ns ± 1.92 ns per loop
+
+        %timeit h & 127
+        # => 56.9 ns ± 1.4 ns per loop
+    \end{py3}
+\end{frame}
+
+\begin{frame}[fragile]{Collisions}
+    \begin{py3}
+        def h(x):
+            return mmh3.hash(x, seed=42, signed=False) & 127
+
+        print(h("country=United Kingdom"))  # => 6
+        print(h("country=Bulgaria"))        # => 6
+    \end{py3}
+    \vfill
+    \begin{itemize}
+        \item Smaller hash size $\to$ more collisions
+        \item Impact on statistical performance and interpretability
+    \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Sign function $\xi$}
+    \begin{itemize}
+        \item Use another function $\xi$ to determine the sign
+        \item Collisions cancel out (in expectation)
+    \end{itemize}
+    \vfill
+    \begin{py3}
+        def h(x):
+            hash_ = mmh3.hash(x, seed=42, signed=True)
+            return abs(hash_) & 127, (hash_ >= 0) * 2 - 1
+
+        print(h("country=United Kingdom"))  # => (  6,  1)
+        print(h("country=Bulgaria"))        # => (122, -1)
+    \end{py3}
+\end{frame}
+
+\begin{frame}{Recap}
+    \begin{itemize}
+        \setlength\itemsep{\bigskipamount}
+        \item $h$ maps any integer input onto integers in some range
+        \item $h$ deterministically scrambles arbitrary\hyp{}length bitmaps,
+              producing fixed\hyp{}length bitmaps
+        \item The impact of collisions on statistical performance is small
+    \end{itemize}
+\end{frame}
+
+\subsection{Example}
+
+\begin{frame}{Original data}
+    \centering
+    \begin{tabular}{llrrr}
+        \toprule
+        \texttt{user} & \texttt{movie}    & \texttt{has\_cats} & \texttt{has\_dogs} & \texttt{rating} \\
+        \midrule
+        Ashley        & A Dog's Journey   & 0                  & 1                  & 4               \\
+        Ashley        & Catwoman          & 1                  & 0                  & 5               \\
+        Ashley        & The Aristocats    & 1                  & 1                  & 5               \\
+        Ashley        & The Queen's Corgi & 0                  & 1                  & 3               \\
+        Barbara       & A Dog's Journey   & 0                  & 1                  & 5               \\
+        Barbara       & The Aristocats    & 1                  & 1                  & 2               \\
+        Barbara       & The Queen's Corgi & 0                  & 1                  & 5               \\
+        Carol         & Catwoman          & 1                  & 0                  & 5               \\
+        Carol         & The Aristocats    & 1                  & 1                  & 5               \\
+        Carol         & The Queen's Corgi & 0                  & 1                  & 4               \\
+        \bottomrule
+    \end{tabular}
+\end{frame}
+
+\begin{frame}{After feature hashing}
+    \only<1>{%
+        \centering
+        \begin{tabular}{rrrr}
+            \toprule
+            \texttt{user} & \texttt{movie} & \texttt{has\_cats} & \texttt{has\_dogs} \\
+            \midrule
+            $2^{-}$       & $5^{-}$        &                    & $110^{-}$          \\
+            $2^{-}$       & $1^{-}$        & $9^{+}$            &                    \\
+            $2^{-}$       & $104^{-}$      & $9^{+}$            & $110^{-}$          \\
+            $2^{-}$       & $67^{+}$       &                    & $110^{-}$          \\
+            $19^{+}$      & $5^{-}$        &                    & $110^{-}$          \\
+            $19^{+}$      & $104^{-}$      & $9^{+}$            & $110^{-}$          \\
+            $19^{+}$      & $67^{+}$       &                    & $110^{-}$          \\
+            $77^{+}$      & $1^{-}$        & $9^{+}$            &                    \\
+            $77^{+}$      & $104^{-}$      & $9^{+}$            & $110^{-}$          \\
+            $77^{+}$      & $67^{+}$       &                    & $110^{-}$          \\
+            \bottomrule
+        \end{tabular}}
+    \only<2>{%
+        \centering
+        $
+            \kbordermatrix{
+                & \ldots & \vec{x}_{1} & \ldots & \vec{x}_{2} & \ldots & \vec{x}_{5} & \ldots & \vec{x}_{9} & \ldots & \vec{x}_{19} & \ldots & \vec{x}_{67} & \ldots & \vec{x}_{77} & \ldots & \vec{x}_{104} & \ldots & \vec{x}_{110} & \ldots \\
+                & &    & & -1 & & -1 & &    & &    & &    & &    & &    & & -1 & \\
+                & & -1 & & -1 & &    & &  1 & &    & &    & &    & &    & &    & \\
+                & &    & & -1 & &    & &  1 & &    & &    & &    & & -1 & & -1 & \\
+                & &    & & -1 & &    & &    & &    & &  1 & &    & &    & & -1 & \\
+                & &    & &    & & -1 & &    & &  1 & &    & &    & &    & & -1 & \\
+                & &    & &    & &    & &  1 & &  1 & &    & &    & & -1 & & -1 & \\
+                & &    & &    & &    & &    & &  1 & &  1 & &    & &    & & -1 & \\
+                & & -1 & &    & &    & &  1 & &    & &    & &  1 & &    & &    & \\
+                & &    & &    & &    & &  1 & &    & &    & &  1 & & -1 & & -1 & \\
+                & &    & &    & &    & &    & &    & &  1 & &  1 & &    & & -1 & \\
+            }
+        $}
+\end{frame}
+
+\begin{frame}[t]{Model}
+    \[
+        \texttt{rating} \sim \alert<2>{\texttt{user}} + \alert<3>{\texttt{movie}} + \alert<4>{\texttt{has\_cats}} + \alert<4>{\texttt{has\_dogs}}
+    \]
+    \vfill
+    \begin{itemize}
+        \item \alert<2>{Average effect for users}
+        \item \alert<3>{Average effect for movies}
+        \item \alert<4>{Average effect for movie\hyp{}related features}
+    \end{itemize}
+\end{frame}
+
+\begin{frame}[t]{Interactions}
+    \[
+        \texttt{rating} \sim \texttt{user} + \texttt{movie} + \alert{\texttt{user} \times \left( \texttt{has\_cats} + \texttt{has\_dogs} \right)}
+    \]
+    \vfill
+    \begin{itemize}
+        \item Average effect for users
+        \item Average effect for movies
+        \item Average effect for movie\hyp{}related features
+        \item \alert{User correction}
+    \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Interactions with feature hashing}
+    \centering
+    \begin{columns}
+        \begin{column}{0.5\textwidth}
+            \centering
+            $h \left( \texttt{user=Ashley} \right) = 2^{-}$ \\
+            \vspace{0.5em}
+            $\searrow$
+        \end{column}
+        \begin{column}{0.5\textwidth}
+            \centering
+            $h \left( \texttt{has\_cats} \right) = 9^{+}$ \\
+            \vspace{0.5em}
+            $\swarrow$
+        \end{column}
+    \end{columns}
+    \vspace{1em}
+    \begin{py3}
+        def interact(h1, h2):
+            i1, s1 = h1
+            i2, s2 = h2
+            return ((i1 ^ i2) * 16777619) & 127, s1 * s2
+    \end{py3}
+    \vspace{0.5em}
+    $\downarrow$ \\
+    \vspace{0.5em}
+    $h \left( \texttt{user=Ashley} \times \texttt{has\_cats} \right) = 81^{-}$
+\end{frame}
+
+\begin{frame}{After feature hashing with interactions}
+    \only<1>{%
+        \centering
+        \begin{tabular}{rrrrrr}
+            \toprule
+            \texttt{user} & \texttt{movie} & \texttt{has\_cats} & \texttt{has\_dogs} & \texttt{likes\_cats} & \texttt{likes\_dogs} \\
+            \midrule
+            $2^{-}$       & $5^{-}$        &                    & $110^{-}$          &                      & $4^{+}$              \\
+            $2^{-}$       & $1^{-}$        & $9^{+}$            &                    & $81^{-}$             &                      \\
+            $2^{-}$       & $104^{-}$      & $9^{+}$            & $110^{-}$          & $81^{-}$             & $4^{+}$              \\
+            $2^{-}$       & $67^{+}$       &                    & $110^{-}$          &                      & $4^{+}$              \\
+            $19^{+}$      & $5^{-}$        &                    & $110^{-}$          &                      & $71^{-}$             \\
+            $19^{+}$      & $104^{-}$      & $9^{+}$            & \alert{$110^{-}$}  & \alert{$110^{+}$}    & $71^{-}$             \\
+            $19^{+}$      & $67^{+}$       &                    & $110^{-}$          &                      & $71^{-}$             \\
+            $77^{+}$      & $1^{-}$        & $9^{+}$            &                    & $12^{+}$             &                      \\
+            $77^{+}$      & $104^{-}$      & $9^{+}$            & $110^{-}$          & $12^{+}$             & $25^{-}$             \\
+            $77^{+}$      & $67^{+}$       &                    & $110^{-}$          &                      & $25^{-}$             \\
+            \bottomrule
+        \end{tabular}}
+    \only<2>{%
+        \centering
+        $
+            \kbordermatrix{
+                & \vec{x}_{1} & \vec{x}_{2} & \vec{x}_{4} & \vec{x}_{5} & \vec{x}_{9} & \vec{x}_{12} & \vec{x}_{19} & \vec{x}_{25} & \vec{x}_{67} & \vec{x}_{71} & \vec{x}_{77} & \vec{x}_{81} & \vec{x}_{104} & \vec{x}_{110} \\
+                &    & -1 &  1 & -1 &    &    &    &    &    &    &    &    &    & -1        \\
+                & -1 & -1 &    &    &  1 &    &    &    &    &    &    & -1 &    &           \\
+                &    & -1 &  1 &    &  1 &    &    &    &    &    &    & -1 & -1 & -1        \\
+                &    & -1 &  1 &    &    &    &    &    &  1 &    &    &    &    & -1        \\
+                &    &    &    & -1 &    &    &  1 &    &    & -1 &    &    &    & -1        \\
+                &    &    &    &    &  1 &    &  1 &    &    & -1 &    &    & -1 & \alert{0} \\
+                &    &    &    &    &    &    &  1 &    &  1 & -1 &    &    &    & -1        \\
+                & -1 &    &    &    &  1 &  1 &    &    &    &    &  1 &    &    &           \\
+                &    &    &    &    &  1 &  1 &    & -1 &    &    &  1 &    & -1 & -1        \\
+                &    &    &    &    &    &    &    & -1 &  1 &    &  1 &    &    & -1        \\
+            }
+        $}
+\end{frame}
+
+\begin{frame}{Pros and cons}
+    \begin{block}{Pros}
+        \begin{itemize}
+            \item Time\hyp{} and space\hyp{}efficient $\to$ online learning
+            \item Sparsity\hyp{}preserving
+            \item Implicit handling of missing data
+        \end{itemize}
+    \end{block}
+    \vfill
+    \begin{block}{Cons}
+        \begin{itemize}
+            \item Collisions $\to$ statistical performance
+            \item Inverse mapping $\to$ interpretability
+        \end{itemize}
+    \end{block}
+\end{frame}
+
+\subsection{Use case}
+
+\begin{frame}{Scenario}
+    \begin{itemize}
+        \item Business directory service (think Yelp)
+        \item Want to improve relevance of and personalise search results
+    \end{itemize}
+    \vfill\pause
+    \begin{columns}
+        \begin{column}{0.5\textwidth}
+            \begin{center}
+                \large\bf%
+                CTR optimisation
+            \end{center}
+            Maximise probability of click on top results
+        \end{column}
+        \begin{column}{0.5\textwidth}
+            \begin{center}
+                \large\bf%
+                Personalisation
+            \end{center}
+            Take into account past user interactions
+        \end{column}
+    \end{columns}
+\end{frame}
+
+\begin{frame}{Data}
+    \begin{center}
+        \begin{tabular}{lllr}
+            \toprule
+            \texttt{user} & \texttt{query}     & \texttt{business}      & \texttt{click} \\
+            \midrule
+            A             & Italian restaurant & Bocca di Lupo          & 1              \\
+            A             & Italian restaurant & Brasserie Zédel        & 0              \\
+            A             & Italian restaurant & Emilia's Crafted Pasta & 0              \\
+            A             & Italian restaurant & Fucina                 & 1              \\
+            A             & Italian restaurant & Trullo                 & 0              \\
+            \bottomrule
+        \end{tabular}
+    \end{center}
+    \vfill
+    \begin{itemize}
+        \item $3.5 \times 10^{8}$ observations ($250$ days)
+        \item $4.5 \times 10^{6}$ businesses with many (sparse) attributes
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Model}
+    \only<1-4>{%
+        \[
+            \begin{split}
+                \texttt{click} \sim&\;\alert<2>{\texttt{user}} + \alert<2>{\texttt{query}} + \alert<2>{\texttt{business}} + \\
+                                    &\;\alert<3>{\texttt{query} \times \texttt{business}} + \alert<4>{\texttt{user} \times \texttt{business}}
+            \end{split}
+        \]
+        \vfill
+        \begin{itemize}
+            \item \alert<2>{Average effects}
+            \item \alert<3>{Relevance correction}
+            \item \alert<4>{User correction}
+        \end{itemize}}
+    \only<5>{%
+        \begin{itemize}
+            \setlength\itemsep{\bigskipamount}
+            \item Fixed $p = 2^{23} \approx 8.4 \times 10^{6}$
+            \item Regularised logistic regression (Spark ML)
+            \item Grid search over elastic net hyperparameters
+        \end{itemize}}
+\end{frame}
+
+\begin{frame}{Results}
+    \begin{itemize}
+        \setlength\itemsep{\bigskipamount}
+        \item Estimated $\approx 5\%$ increase in CTR based on train/test split
+        \item A/B testing showed $\approx 10\%$ increase in CTR
+    \end{itemize}
+\end{frame}
+
+\section{Library support}
+
+\begin{frame}{Vowpal Wabbit (VW)}
+    \begin{itemize}
+        \setlength\itemsep{\bigskipamount}
+        \item C++ with Python bindings
+        \item Linear, logistic and Poisson regression with interactions
+        \item Extremely fast and scalable
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{\texttt{scikit-learn}}
+    \begin{itemize}
+        \setlength\itemsep{\bigskipamount}
+        \item Some support for feature hashing:
+              \texttt{feature\_extraction.FeatureHasher} and
+              \texttt{feature\_extraction.text.HashingVectorizer}
+        \item No interactions
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Apache Spark}
+    \begin{itemize}
+        \setlength\itemsep{\bigskipamount}
+        \item Some support for feature hashing in MLlib:
+              \texttt{ml.feature.FeatureHasher} and
+              \texttt{ml.feature.HashingTF}
+        \item PySpark transformers (hashing and interactions)
+        \item VW bindings coming soon to MMLSpark
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Recap}
+    \begin{block}{Feature hashing is\ldots}
+        \begin{itemize}
+            \item Great for online training on lots of data
+            \item Well\hyp{}suited for high\hyp{}cardinality features
+                  (sparse $\mat{X}$)
+            \item Even better with interactions
+        \end{itemize}
+    \end{block}
+\end{frame}
+
+\begin{frame}
+    \begin{center}
+        {\LARGE%
+         Thank you!}
+        \vfill
+        If you want to keep in touch\ldots \\[\medskipamount]
+        \includegraphics[height=1ex]{figures/mail}~gianluca@campanella.org
+        \hspace{1em}
+        \includegraphics[height=1ex]{figures/github}~gcampanella
+        \hspace{1em}
+        \includegraphics[height=1ex]{figures/linkedin}~gcampanella
+    \end{center}
+\end{frame}
+
+\end{document}
