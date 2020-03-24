@@ -4,7 +4,7 @@ astor==0.8.0
 atari-py==0.2.3
 attrs==19.1.0
 backcall==0.1.0
-bleach==3.1.0
+bleach==3.1.2
 box2d-py==2.3.8
 cffi==1.12.3
 cloudpickle==1.2.1
